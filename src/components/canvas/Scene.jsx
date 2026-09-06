@@ -1,5 +1,6 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useCallback, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
+import { PerformanceMonitor } from '@react-three/drei';
 import BlackHole from './BlackHole';
 import ParticleField from './ParticleField';
 import Starfield from './Starfield';
@@ -11,7 +12,24 @@ const PostFX = lazy(() => import('./PostFX'));
 
 export default function Scene() {
   const particleCount = useSceneStore((s) => s.particleCount);
-  const dpr = useSceneStore((s) => s.dpr);
+  const dprRange = useSceneStore((s) => s.dpr);
+
+  // Resolution is the biggest lever on GPU cost (bloom + lensing are full-screen
+  // passes). Start at the tier's cap and let the monitor walk it down between
+  // the tier bounds when the frame rate sags, and back up when it recovers.
+  const [minDpr, maxDpr] = dprRange;
+  const [dpr, setDpr] = useState(() =>
+    Math.min(maxDpr, typeof window !== 'undefined' ? window.devicePixelRatio || 1 : 1)
+  );
+  const onChange = useCallback(
+    ({ factor }) => {
+      const target = Math.min(maxDpr, window.devicePixelRatio || 1);
+      // factor: 1 = smooth, 0 = struggling
+      const next = Math.round((minDpr + (target - minDpr) * factor) * 20) / 20;
+      setDpr(next);
+    },
+    [minDpr, maxDpr]
+  );
 
   return (
     <Canvas
@@ -30,6 +48,13 @@ export default function Scene() {
       style={{ position: 'absolute', inset: 0 }}
     >
       <color attach="background" args={['#000000']} />
+      <PerformanceMonitor
+        ms={250}
+        iterations={8}
+        flipflops={4}
+        onChange={onChange}
+        onFallback={() => setDpr(minDpr)}
+      />
       <CameraRig />
       <Suspense fallback={null}>
         <Starfield />
