@@ -1,0 +1,30 @@
+{
+  "name": "singularity",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Singularity — an experimental 3D website built around a living black hole.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@react-three/drei": "^9.108.3",
+    "@react-three/fiber": "^8.16.8",
+    "@react-three/postprocessing": "~2.16.2",
+    "gsap": "^3.12.5",
+    "postprocessing": "~6.35.5",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "three": "^0.165.0",
+    "zustand": "^4.5.4"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.1",
+    "autoprefixer": "^10.4.19",
+    "postcss": "^8.4.39",
+    "tailwindcss": "^3.4.6",
+    "vite": "^5.3.4"
+  }
+}
