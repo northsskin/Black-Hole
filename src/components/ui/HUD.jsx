@@ -21,8 +21,49 @@ const CHAPTERS = {
   closing: { in: 0.84 },
 };
 
+/** Split a line into letter spans so it can assemble itself. */
+export function Letters({ text, className }) {
+  return (
+    <span className={className} aria-label={text}>
+      {[...text].map((ch, i) => (
+        <span key={i} className="letter inline-block" aria-hidden="true" style={{ whiteSpace: ch === ' ' ? 'pre' : undefined }}>
+          {ch}
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** Letters fly in from scattered offsets and settle — used for every title. */
+export function assembleLetters(scope, { delay = 0, duration = 1.1, spread = 30 } = {}) {
+  const letters = scope ? scope.querySelectorAll('.letter') : [];
+  if (!letters.length) return null;
+  return gsap.fromTo(
+    letters,
+    {
+      opacity: 0,
+      y: () => gsap.utils.random(-spread, spread),
+      x: () => gsap.utils.random(-spread * 0.6, spread * 0.6),
+      rotateX: () => gsap.utils.random(-70, 70),
+      filter: 'blur(6px)',
+    },
+    {
+      opacity: 1,
+      y: 0,
+      x: 0,
+      rotateX: 0,
+      filter: 'blur(0px)',
+      duration,
+      delay,
+      ease: 'expo.out',
+      stagger: { each: 0.035, from: 'random' },
+    }
+  );
+}
+
 export default function HUD() {
   const root = useRef(null);
+  const main = useRef(null);
   const opening = useRef(null);
   const about = useRef(null);
   const photon = useRef(null);
@@ -31,6 +72,7 @@ export default function HUD() {
   const descentEl = useRef(null);
   const cornersRef = useRef([]);
   const entered = useSceneStore((s) => s.entered);
+  const phase = useSceneStore((s) => s.phase);
   const reducedMotion = useSceneStore((s) => s.reducedMotion);
 
   // scrubbed chapter timeline, normalised to 0..1 across the page
@@ -68,19 +110,37 @@ export default function HUD() {
     return () => ctx.revert();
   }, [reducedMotion]);
 
-  // entrance once the loader hands over
+  // entrance once the intro hands over: the title assembles itself
   useEffect(() => {
     if (!entered) return;
     const ctx = gsap.context(() => {
-      gsap.to(opening.current, { autoAlpha: 1, y: 0, duration: 1.8, delay: 0.5, ease: 'power2.out' });
+      gsap.set(opening.current, { autoAlpha: 1, y: 0 });
+      assembleLetters(opening.current, { delay: 0.1, duration: reducedMotion ? 0.01 : 1.3 });
+      const after = opening.current.querySelectorAll('.after-title');
+      if (after.length) {
+        gsap.fromTo(after, { autoAlpha: 0, y: 10 }, { autoAlpha: 1, y: 0, duration: 1.2, delay: 1.1, ease: 'power2.out' });
+      }
       gsap.fromTo(
         cornersRef.current,
-        { autoAlpha: 0 },
-        { autoAlpha: 1, duration: 1.4, delay: 0.9, stagger: 0.12, ease: 'power1.out' }
+        { autoAlpha: 0, y: -6 },
+        { autoAlpha: 1, y: 0, duration: 1.2, delay: 0.6, stagger: 0.15, ease: 'power2.out' }
       );
+      cornersRef.current.forEach((el, i) => el && assembleLetters(el, { delay: 0.6 + i * 0.15, duration: 0.9, spread: 10 }));
     }, root);
     return () => ctx.revert();
-  }, [entered]);
+  }, [entered, reducedMotion]);
+
+  // during a jump / while parked at a star the fall's HUD steps aside
+  useEffect(() => {
+    if (!entered) return;
+    const away = phase === 'jump' || phase === 'star';
+    gsap.to([main.current, ...cornersRef.current.filter(Boolean)], {
+      autoAlpha: away ? 0 : 1,
+      duration: away ? 0.25 : 0.8,
+      ease: 'power2.out',
+      overwrite: 'auto',
+    });
+  }, [phase, entered]);
 
   // live readouts — written straight into the DOM, no React re-render
   useEffect(() => {
@@ -95,7 +155,6 @@ export default function HUD() {
     return unsub;
   }, []);
 
-  // keyboard users: focusing a credits link brings the credits into view
   const revealCredits = () => {
     if (useSceneStore.getState().scrollProgress < CHAPTERS.closing.in) {
       window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' });
@@ -110,7 +169,9 @@ export default function HUD() {
     <div ref={root} className="pointer-events-none fixed inset-0 z-20 select-none">
       {/* corners */}
       <header ref={corner(0)} className="hud absolute left-6 top-6 opacity-0 md:left-10 md:top-9">
-        <div className="text-ice">{content.title}</div>
+        <div className="text-ice">
+          <Letters text={content.title} />
+        </div>
         <div className="text-dim">
           {content.index} — {content.tagline}
         </div>
@@ -142,15 +203,17 @@ export default function HUD() {
         </div>
       </div>
 
-      <main>
+      <main ref={main}>
         {/* 01 — opening */}
         <section
           ref={opening}
           className="chapter absolute inset-x-0 bottom-[16vh] flex flex-col items-center gap-8 px-6 text-center"
           aria-label="opening"
         >
-          <p className="hud-display text-ice text-[clamp(1.35rem,3vw,2.5rem)] lowercase">{content.chapters.opening}</p>
-          <div className="flex flex-col items-center gap-3">
+          <p className="hud-display text-ice text-[clamp(1.35rem,3vw,2.5rem)] lowercase" style={{ perspective: '600px' }}>
+            <Letters text={content.chapters.opening} />
+          </p>
+          <div className="after-title flex flex-col items-center gap-3">
             <span className="hud text-dim">scroll</span>
             <span className="scroll-cue" />
           </div>

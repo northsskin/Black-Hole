@@ -2,36 +2,67 @@ import { useEffect, useRef, useState } from 'react';
 import { useProgress } from '@react-three/drei';
 import { useSceneStore } from '../../store/useSceneStore';
 import { content } from '../../content';
+import { primeIntro, startIntro } from '../../directors/intro';
 
 const TAU = Math.PI * 2;
 const PARTICLES = 150;
+const AUTO_ENTER_MS = 10000;
 
 /**
- * Loading screen: a ring of glowing particles fills clockwise with load progress.
- * When everything is ready they spiral inward and vanish into a small black core —
- * the first fall of the piece, before the real one begins.
+ * Loading screen: a ring of glowing particles fills clockwise with load progress,
+ * then holds on "click anywhere to enter" (the click is also what lets the sound
+ * start). On the gesture the ring spirals into a small black core — the first fall
+ * of the piece — while the warp arrival takes over behind it.
  */
 export default function Loader() {
   const { progress, active } = useProgress();
   const postfxReady = useSceneStore((s) => s.postfxReady);
   const reducedMotion = useSceneStore((s) => s.reducedMotion);
-  const setEntered = useSceneStore((s) => s.setEntered);
+  const phase = useSceneStore((s) => s.phase);
 
   const canvasRef = useRef(null);
   const wrapRef = useRef(null);
   const pctRef = useRef(null);
+  const enterRef = useRef(null);
   const [gone, setGone] = useState(false);
 
-  const live = useRef({ progress: 0, active: false, postfxReady: false });
+  const live = useRef({ progress: 0, active: false, postfxReady: false, begin: false, withSound: true });
   live.current.progress = progress;
   live.current.active = active;
   live.current.postfxReady = postfxReady;
+
+  // the gesture that starts everything
+  useEffect(() => {
+    if (phase !== 'ready') return undefined;
+    const begin = (withSound) => {
+      if (live.current.begin) return;
+      live.current.begin = true;
+      live.current.withSound = withSound;
+    };
+    const onPointer = () => begin(true);
+    const onKey = (e) => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        begin(true);
+      }
+    };
+    window.addEventListener('pointerdown', onPointer);
+    window.addEventListener('keydown', onKey);
+    const auto = window.setTimeout(() => begin(false), AUTO_ENTER_MS);
+    enterRef.current?.focus({ preventScroll: true });
+    return () => {
+      window.removeEventListener('pointerdown', onPointer);
+      window.removeEventListener('keydown', onKey);
+      window.clearTimeout(auto);
+    };
+  }, [phase]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
     const wrap = wrapRef.current;
     if (!canvas || !wrap) return undefined;
     const ctx = canvas.getContext('2d');
+    primeIntro();
 
     const parts = Array.from({ length: PARTICLES }, (_, i) => ({
       a: (i / PARTICLES) * TAU - Math.PI / 2,
@@ -42,11 +73,11 @@ export default function Loader() {
     }));
 
     const t0 = performance.now();
-    const minDuration = reducedMotion ? 500 : 1800;
-    const convergeDuration = reducedMotion ? 320 : 1400;
+    const minDuration = reducedMotion ? 500 : 1600;
+    const convergeDuration = reducedMotion ? 320 : 1250;
     let shown = 0;
-    let phase = 'load';
-    let phaseStart = 0;
+    let stage = 'load';
+    let stageStart = 0;
     let raf = 0;
     let dpr = Math.min(window.devicePixelRatio || 1, 2);
 
@@ -67,7 +98,6 @@ export default function Loader() {
       const elapsed = now - t0;
       const L = live.current;
 
-      // if nothing ever registers with the loading manager, don't hang forever
       let target = L.progress / 100;
       if (!L.active && elapsed > 2500) target = 1;
       if (elapsed > 12000) target = 1;
@@ -75,23 +105,30 @@ export default function Loader() {
       if (target >= 1 && shown > 0.992) shown = 1;
 
       const assetsReady = shown >= 1 && (L.postfxReady || elapsed > 12000);
-      if (phase === 'load' && assetsReady && elapsed > minDuration) {
-        phase = 'converge';
-        phaseStart = now;
+      if (stage === 'load' && assetsReady && elapsed > minDuration) {
+        stage = 'ready';
+        stageStart = now;
+        useSceneStore.setState({ phase: 'ready' });
+      }
+      if (stage === 'ready' && L.begin) {
+        stage = 'converge';
+        stageStart = now;
+        startIntro({ withSound: L.withSound });
       }
 
       let conv = 0;
-      if (phase === 'converge') conv = Math.min((now - phaseStart) / convergeDuration, 1);
+      if (stage === 'converge') conv = Math.min((now - stageStart) / convergeDuration, 1);
       const e = reducedMotion ? conv : easeInCubic(conv);
 
       const cx = w / 2;
       const cy = h / 2;
-      const R = Math.min(w, h) * 0.16;
+      // while waiting for the click the ring breathes
+      const breathe = stage === 'ready' ? 1 + 0.025 * Math.sin((now - stageStart) * 0.0025) : 1;
+      const R = Math.min(w, h) * 0.16 * breathe;
       const coreR = R * (0.26 + 0.22 * e);
 
       ctx.clearRect(0, 0, w, h);
 
-      // the core: a black disc with a faint cold rim
       ctx.beginPath();
       ctx.arc(cx, cy, coreR, 0, TAU);
       ctx.fillStyle = '#000';
@@ -109,13 +146,11 @@ export default function Loader() {
         ctx.fill();
       }
 
-      // the ring of particles
       const lit = Math.floor(shown * PARTICLES + 1e-4);
       ctx.globalCompositeOperation = 'lighter';
       for (let i = 0; i < PARTICLES; i++) {
         const p = parts[i];
-        const isLit = i < lit || phase !== 'load';
-        // each particle falls on its own slightly delayed schedule
+        const isLit = i < lit || stage !== 'load';
         const pe = reducedMotion ? e : easeInCubic(Math.min(Math.max(conv * 1.25 - p.lag * 0.25, 0), 1));
         const ang = p.a + pe * 2.6;
         const rad = (R + p.jitter) * (1 - pe) + coreR * 0.98 * pe;
@@ -142,14 +177,15 @@ export default function Loader() {
       }
       ctx.globalCompositeOperation = 'source-over';
 
-      if (pctRef.current) {
-        pctRef.current.textContent = String(Math.round(shown * 100)).padStart(3, '0');
+      if (pctRef.current) pctRef.current.textContent = String(Math.round(shown * 100)).padStart(3, '0');
+      if (enterRef.current) {
+        enterRef.current.style.opacity = stage === 'ready' ? '1' : '0';
+        enterRef.current.style.pointerEvents = stage === 'ready' ? 'auto' : 'none';
       }
 
-      if (phase === 'converge' && conv >= 1) {
-        phase = 'done';
+      if (stage === 'converge' && conv >= 1) {
+        stage = 'done';
         wrap.style.opacity = '0';
-        setEntered(true);
         window.setTimeout(() => setGone(true), 900);
         return;
       }
@@ -175,15 +211,28 @@ export default function Loader() {
       aria-label="loading singularity"
     >
       <canvas ref={canvasRef} className="absolute inset-0 h-full w-full" aria-hidden="true" />
-      {/* the counter changes every frame; keep it out of the accessibility tree */}
-      <div className="hud absolute inset-x-0 bottom-[11vh] flex flex-col items-center gap-2 text-dim" aria-hidden="true">
-        <span className="text-ice">{content.title}</span>
-        <span>
+      <div className="hud absolute inset-x-0 bottom-[11vh] flex flex-col items-center gap-2 text-dim">
+        <span className="text-ice" aria-hidden="true">
+          {content.title}
+        </span>
+        <span aria-hidden="true">
           <span ref={pctRef} className="text-ice">
             000
           </span>{' '}
           %
         </span>
+        <button
+          ref={enterRef}
+          type="button"
+          className="blink mt-4 text-ice transition-opacity duration-700"
+          style={{ opacity: 0, pointerEvents: 'none' }}
+          onClick={() => {
+            live.current.begin = true;
+            live.current.withSound = true;
+          }}
+        >
+          {content.enter}
+        </button>
       </div>
     </div>
   );

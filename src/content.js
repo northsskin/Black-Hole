@@ -6,6 +6,9 @@ export const content = {
   title: 'Singularity',
   index: '01',
   tagline: 'an experiment in falling',
+  enter: 'click anywhere to enter',
+  catalog: 'nearby',
+  returnLabel: 'return to the fall',
 
   chapters: {
     opening: 'everything falls eventually',

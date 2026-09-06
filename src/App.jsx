@@ -2,10 +2,13 @@ import { useCallback } from 'react';
 import Scene from './components/canvas/Scene';
 import Loader from './components/ui/Loader';
 import HUD from './components/ui/HUD';
+import StarCard, { JumpOverlay } from './components/ui/StarCard';
+import JumpArcs from './components/ui/JumpArcs';
+import Catalog from './components/ui/Catalog';
 import AudioToggle from './components/ui/AudioToggle';
 import Fallback from './components/ui/Fallback';
 import { useSceneStore } from './store/useSceneStore';
-import { useScrollDriver, usePointer, useAudioBoot } from './hooks/useInteraction';
+import { useScrollDriver, usePointer, useAudioBoot, useDragOrbit, useReturnGestures } from './hooks/useInteraction';
 
 export const SCROLL_LENGTH_VH = 720;
 export const SCROLL_LENGTH_REDUCED_VH = 460;
@@ -17,11 +20,12 @@ export default function App() {
   useScrollDriver();
   usePointer();
   useAudioBoot();
+  useDragOrbit();
+  useReturnGestures();
 
   const skipToCredits = useCallback((e) => {
     e.preventDefault();
     window.scrollTo({ top: document.documentElement.scrollHeight, behavior: 'auto' });
-    // give the scrubbed timeline a beat to reveal the section, then focus it
     window.setTimeout(() => {
       const credits = document.getElementById('credits');
       credits?.querySelector('a')?.focus();
@@ -41,6 +45,10 @@ export default function App() {
       </div>
 
       <HUD />
+      <Catalog />
+      <StarCard />
+      <JumpArcs />
+      <JumpOverlay />
       <AudioToggle />
       <Loader />
 

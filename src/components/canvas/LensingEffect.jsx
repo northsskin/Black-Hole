@@ -4,6 +4,7 @@ import { Effect, EffectAttribute, BlendFunction } from 'postprocessing';
 import * as THREE from 'three';
 import { shaders } from '../../shaders';
 import { HORIZON_RADIUS } from './BlackHole';
+import { sim } from '../../utils/sim';
 
 class LensingEffectImpl extends Effect {
   constructor() {
@@ -19,6 +20,8 @@ class LensingEffectImpl extends Effect {
         ['uAberration', new THREE.Uniform(0.03)],
         ['uSwirl', new THREE.Uniform(0.28)],
         ['uRing', new THREE.Uniform(1.0)],
+        ['uPulseR', new THREE.Uniform(0)],
+        ['uPulseAmp', new THREE.Uniform(0)],
       ]),
     });
   }
@@ -53,22 +56,32 @@ const Lensing = forwardRef(function Lensing({ strength = 1.0, soft = 0.5 }, ref)
 
     // where the singularity sits on screen
     tmp.set(0, 0, 0).project(camera);
+    const behind = tmp.z > 1 || Number.isNaN(tmp.x);
     u.get('uCenter').value.set(tmp.x * 0.5 + 0.5, tmp.y * 0.5 + 0.5);
 
     // apparent size of the horizon (as a fraction of viewport height)
+    const form = THREE.MathUtils.clamp(sim.form, 0.0005, 1);
+    const R = HORIZON_RADIUS * form;
     const d = camera.position.length();
-    const ang = Math.asin(Math.min(HORIZON_RADIUS / Math.max(d, HORIZON_RADIUS + 1e-3), 0.9995));
+    const ang = Math.asin(Math.min(R / Math.max(d, R + 1e-3), 0.9995));
     const halfH = Math.tan(THREE.MathUtils.degToRad(camera.fov) * 0.5);
     const radius = Math.tan(ang) / (2 * halfH);
 
     // let the bending relax as we fall in, otherwise the shadow eats the frame too early
-    const s = strength * (0.06 + 0.94 * smoothstep(1.3, 4.8, d));
+    let s = strength * (0.06 + 0.94 * smoothstep(1.3, 4.8, d)) * smoothstep(0.05, 0.6, form);
+    if (behind) s = 0;
 
     u.get('uRadius').value = radius;
     u.get('uStrength').value = s;
     u.get('uSoft').value = soft;
     u.get('uEdge').value = radius * solveShadowEdge(s, soft);
     u.get('uAberration').value = 0.012 + 0.028 * (1 - smoothstep(2, 14, d));
+    u.get('uRing').value = behind ? 0 : smoothstep(0.15, 0.7, form);
+
+    // formation shockwave: a ring of distortion rolling out across the frame
+    const p = sim.pulse;
+    u.get('uPulseR').value = p * 1.4;
+    u.get('uPulseAmp').value = p > 0 && p < 1 ? 0.11 * Math.sin(Math.PI * p) : 0;
   });
 
   return <primitive ref={ref} object={effect} dispose={null} />;

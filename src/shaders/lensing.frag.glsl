@@ -12,6 +12,9 @@
 // far side of the accretion disk gets folded up over the top and under the
 // bottom. A per-channel thetaE gives chromatic dispersion that grows toward the
 // edge, and a tiny rotation of the sample direction fakes frame dragging.
+//
+// uPulse* drive an expanding ring of distortion: the "shockwave" when the
+// horizon first forms.
 uniform vec2 uCenter;     // screen-space position of the singularity (uv)
 uniform float uRadius;    // screen-space radius of the horizon (fraction of viewport height)
 uniform float uStrength;  // thetaE^2 as a multiple of uRadius^2
@@ -20,6 +23,8 @@ uniform float uSoft;      // softening radius as a multiple of uRadius
 uniform float uAberration;
 uniform float uSwirl;
 uniform float uRing;
+uniform float uPulseR;    // shockwave radius (viewport-height units)
+uniform float uPulseAmp;  // shockwave strength (0 = off)
 
 vec2 lensSample(vec2 p, float r, float k) {
   float rs = uRadius;
@@ -27,6 +32,13 @@ vec2 lensSample(vec2 p, float r, float k) {
   float e2 = rs * rs * uStrength * k;
   float denom = r * r + eps * eps;
   float beta = r - e2 * r / denom;
+
+  // expanding shockwave: pushes the image outward along a thin ring
+  if (uPulseAmp > 0.0001) {
+    float w = 0.035 + uPulseR * 0.04;
+    float d = (r - uPulseR) / w;
+    beta -= uPulseAmp * exp(-d * d) * k;
+  }
 
   float twist = uSwirl * e2 / denom;
   float c = cos(twist);
@@ -43,7 +55,7 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   float rs = uRadius;
 
   float proximity = 1.0 - smoothstep(rs * 1.0, rs * 7.0, r);
-  float ab = uAberration * proximity;
+  float ab = uAberration * proximity + uPulseAmp * 0.4;
 
   vec3 col = vec3(0.0);
   for (int i = 0; i < 3; i++) {
@@ -59,6 +71,13 @@ void mainImage(const in vec4 inputColor, const in vec2 uv, out vec4 outputColor)
   float ringCore = exp(-(dEdge * dEdge) / (w * w));
   float ringHalo = exp(-(dEdge * dEdge) / (w * w * 30.0)) * 0.16;
   col += vec3(0.66, 0.82, 1.0) * (ringCore * 1.1 + ringHalo) * uRing;
+
+  // the shockwave itself glows faintly as it passes
+  if (uPulseAmp > 0.0001) {
+    float pw = 0.035 + uPulseR * 0.04;
+    float pd = (r - uPulseR) / pw;
+    col += vec3(0.5, 0.72, 1.0) * exp(-pd * pd) * uPulseAmp * 2.2;
+  }
 
   // clean shadow: everything inside the solved edge is the hole
   col *= smoothstep(uEdge - w * 0.8, uEdge + w * 0.15, r);

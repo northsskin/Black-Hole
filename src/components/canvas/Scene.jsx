@@ -4,7 +4,10 @@ import { PerformanceMonitor } from '@react-three/drei';
 import BlackHole from './BlackHole';
 import ParticleField from './ParticleField';
 import Starfield from './Starfield';
+import Nebulae from './Nebulae';
+import DistantStars from './DistantStars';
 import CameraRig from './CameraRig';
+import CameraFX from './CameraFX';
 import { useSceneStore } from '../../store/useSceneStore';
 
 // The whole post-processing pipeline (postprocessing + effects) is its own chunk.
@@ -24,7 +27,6 @@ export default function Scene() {
   const onChange = useCallback(
     ({ factor }) => {
       const target = Math.min(maxDpr, window.devicePixelRatio || 1);
-      // factor: 1 = smooth, 0 = struggling
       const next = Math.round((minDpr + (target - minDpr) * factor) * 20) / 20;
       setDpr(next);
     },
@@ -48,18 +50,15 @@ export default function Scene() {
       style={{ position: 'absolute', inset: 0 }}
     >
       <color attach="background" args={['#000000']} />
-      <PerformanceMonitor
-        ms={250}
-        iterations={8}
-        flipflops={4}
-        onChange={onChange}
-        onFallback={() => setDpr(minDpr)}
-      />
+      <PerformanceMonitor ms={250} iterations={8} flipflops={4} onChange={onChange} onFallback={() => setDpr(minDpr)} />
       <CameraRig />
       <Suspense fallback={null}>
         <Starfield />
+        <Nebulae />
         <BlackHole />
         <ParticleField count={particleCount} />
+        <DistantStars />
+        <CameraFX />
       </Suspense>
       <Suspense fallback={null}>
         <PostFX />

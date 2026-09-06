@@ -8,8 +8,11 @@ const caps = detectCapabilities();
  *
  * Per-frame values (scrollProgress, scrollVelocity, mouse, distance) are written
  * with `useSceneStore.setState` and READ inside `useFrame` via `getState()` so
- * that nothing re-renders sixty times a second. Only UI-level flags
- * (loaded / entered / muted) are consumed through React selectors.
+ * that nothing re-renders sixty times a second. Only UI-level state (phase,
+ * active star, muted) is consumed through React selectors.
+ *
+ * phase: loading -> ready (click to enter) -> intro (warp arrival) -> fall
+ *        fall <-> jump <-> star (parked at a distant object)
  */
 export const useSceneStore = create((set) => ({
   // capabilities (fixed for the session)
@@ -27,9 +30,11 @@ export const useSceneStore = create((set) => ({
   distance: 26, // camera distance to the singularity (in horizon radii)
 
   // lifecycle
-  loaded: false, // three.js assets resolved
+  phase: 'loading',
   postfxReady: false, // lazy post-processing chunk mounted
-  entered: false, // loader has finished converging
+  entered: false, // true once the intro has handed over to the fall (HUD/scroll live)
+  activeStar: null, // id of the object we are parked at
+  hoverStar: null,
   muted: (() => {
     try {
       return window.localStorage.getItem('singularity:muted') === '1';
@@ -39,10 +44,8 @@ export const useSceneStore = create((set) => ({
   })(),
   audioStarted: false,
 
-  setScrollProgress: (p) => set({ scrollProgress: p }),
+  setPhase: (phase) => set({ phase }),
   setMouse: (x, y) => set({ mouse: { x, y } }),
-  setLoaded: (v) => set({ loaded: v }),
-  setEntered: (v) => set({ entered: v }),
   setMuted: (v) => {
     try {
       window.localStorage.setItem('singularity:muted', v ? '1' : '0');

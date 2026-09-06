@@ -1,6 +1,7 @@
-// Two populations share one draw call:
+// Three populations share one draw call:
 //   aType 0 -> distant stars on a shell (static, twinkling)
 //   aType 1 -> infalling matter (orbits, spirals inward, respawns)
+//   aType 2 -> near dust, drifting slowly, for parallax as the camera moves
 // Every position is computed here from a per-particle seed, so the CPU never touches
 // the buffer after creation.
 attribute vec4 aSeed;
@@ -9,6 +10,8 @@ attribute float aType;
 uniform float uTime;
 uniform float uSpin;
 uniform float uMotion;
+uniform float uForm;       // 0..1: matter is captured from a loose cloud into the disk
+uniform float uBoost;      // 0..1: stars flare up so the warp pass has something to streak
 uniform vec3 uMouse;
 uniform float uMouseStrength;
 uniform float uPixelRatio;
@@ -32,10 +35,10 @@ void main() {
     pos = rad * vec3(sin(phi) * cos(theta), cos(phi), sin(phi) * sin(theta));
 
     float tw = 0.75 + 0.25 * sin(uTime * (0.5 + aSeed.w * 1.6) + aSeed.y * 40.0) * uMotion;
-    size = (0.5 + aSeed.w * aSeed.w * 1.8) * tw;
-    col = mix(vec3(0.72, 0.84, 1.0), vec3(1.0, 0.94, 0.86), step(0.82, aSeed.w));
-    alpha = (0.35 + 0.45 * tw) * (0.4 + 0.6 * aSeed.w);
-  } else {
+    size = (0.5 + aSeed.w * aSeed.w * 1.8) * tw * (1.0 + uBoost * 1.6);
+    col = mix(vec3(0.72, 0.84, 1.0), vec3(1.0, 0.94, 0.86), step(0.82, aSeed.w)) * (1.0 + uBoost * 2.5);
+    alpha = (0.35 + 0.45 * tw) * (0.4 + 0.6 * aSeed.w) * (1.0 + uBoost);
+  } else if (aType < 1.5) {
     float r0 = mix(1.7, 10.5, pow(aSeed.x, 1.35));
     float rate = 0.010 + 0.018 * aSeed.w;
     float life = fract(uSpin * rate + aSeed.y * 7.0);
@@ -47,11 +50,29 @@ void main() {
     float h = (aSeed.z - 0.5) * thickness;
     pos = vec3(r * cos(phi), h, -r * sin(phi));
 
+    // formation: each grain starts somewhere in a loose cloud and is pulled onto its orbit
+    vec3 cloudDir = normalize(vec3(aSeed.x - 0.5, (aSeed.z - 0.5) * 0.9, aSeed.w - 0.5) + vec3(1e-3));
+    vec3 cloud = cloudDir * (7.0 + 16.0 * aSeed.y);
+    float capture = smoothstep(0.0, 1.0, clamp((uForm - aSeed.w * 0.35) / 0.65, 0.0, 1.0));
+    capture = capture * capture * (3.0 - 2.0 * capture);
+    pos = mix(cloud, pos, capture);
+
     float heat = 1.0 - clamp((r - 1.0) / 9.5, 0.0, 1.0);
     col = mix(vec3(0.40, 0.30, 0.95), vec3(0.62, 0.80, 1.0), heat);
     col = mix(col, vec3(0.95, 0.97, 1.0), pow(heat, 5.0));
     size = (0.45 + aSeed.w * 1.0) * (0.6 + heat * 1.1);
     alpha = smoothstep(0.0, 0.08, life) * (1.0 - smoothstep(0.92, 1.0, life)) * (0.18 + 0.5 * heat);
+    alpha *= 0.25 + 0.75 * capture;
+  } else {
+    // near dust: a loose shell around the whole system, barely moving
+    float rad = mix(9.0, 48.0, aSeed.x);
+    float theta = aSeed.y * TAU + uTime * 0.012 * uMotion * (aSeed.w - 0.5);
+    float phi = acos(2.0 * aSeed.z - 1.0);
+    pos = rad * vec3(sin(phi) * cos(theta), cos(phi) * 0.7, sin(phi) * sin(theta));
+    pos.y += sin(uTime * 0.2 + aSeed.x * 20.0) * 0.4 * uMotion;
+    size = 1.4 + aSeed.w * 2.2;
+    col = vec3(0.50, 0.60, 0.88);
+    alpha = 0.08 + 0.12 * aSeed.w;
   }
 
   // the visitor's pointer is a soft gravitational disturbance: push + swirl

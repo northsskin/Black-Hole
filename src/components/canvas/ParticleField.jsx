@@ -7,7 +7,8 @@ import { useSceneStore } from '../../store/useSceneStore';
 import { sim } from '../../utils/sim';
 import { asset } from '../../utils/assets';
 
-const STAR_SHARE = 0.5;
+const STAR_SHARE = 0.45;
+const DUST_SHARE = 0.12;
 
 export default function ParticleField({ count = 8000 }) {
   const sprite = useTexture(asset('textures/particle.png'));
@@ -20,12 +21,13 @@ export default function ParticleField({ count = 8000 }) {
     const seeds = new Float32Array(count * 4);
     const types = new Float32Array(count);
     const starCount = Math.floor(count * STAR_SHARE);
+    const dustCount = Math.floor(count * DUST_SHARE);
     for (let i = 0; i < count; i++) {
       seeds[i * 4 + 0] = Math.random();
       seeds[i * 4 + 1] = Math.random();
       seeds[i * 4 + 2] = Math.random();
       seeds[i * 4 + 3] = Math.random();
-      types[i] = i < starCount ? 0 : 1;
+      types[i] = i < starCount ? 0 : i < starCount + dustCount ? 2 : 1;
     }
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
     geo.setAttribute('aSeed', new THREE.BufferAttribute(seeds, 4));
@@ -45,6 +47,8 @@ export default function ParticleField({ count = 8000 }) {
           uTime: { value: 0 },
           uSpin: { value: 0 },
           uMotion: { value: 1 },
+          uForm: { value: 1 },
+          uBoost: { value: 0 },
           uMouse: { value: new THREE.Vector3(0, 0, 0) },
           uMouseStrength: { value: 0 },
           uPixelRatio: { value: 1 },
@@ -75,6 +79,8 @@ export default function ParticleField({ count = 8000 }) {
     u.uTime.value = state.clock.elapsedTime;
     u.uSpin.value = sim.spin;
     u.uMotion.value = s.reducedMotion ? 0 : 1;
+    u.uForm.value = sim.form;
+    u.uBoost.value = sim.warp;
     u.uPixelRatio.value = gl.getPixelRatio();
 
     // pointer -> a point in world space at the singularity's depth
@@ -83,11 +89,11 @@ export default function ParticleField({ count = 8000 }) {
     sm.y += (s.mouse.y - sm.y) * (1 - Math.exp(-dt * 6));
     scratch.ndc.set(sm.x, sm.y, 0.5).unproject(camera);
     scratch.dir.copy(scratch.ndc).sub(camera.position).normalize();
-    const depth = camera.position.length();
+    const depth = Math.min(camera.position.length(), 60);
     scratch.target.copy(camera.position).addScaledVector(scratch.dir, depth);
     u.uMouse.value.lerp(scratch.target, 1 - Math.exp(-dt * 5));
 
-    const wantStrength = s.reducedMotion ? 0 : 1;
+    const wantStrength = s.reducedMotion || sim.drag.active ? 0 : 1;
     u.uMouseStrength.value += (wantStrength - u.uMouseStrength.value) * (1 - Math.exp(-dt * 2));
   });
 
