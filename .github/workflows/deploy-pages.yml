@@ -25,6 +25,34 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # If the repository is still on "Deploy from a branch", GitHub's built-in
+      # "pages build and deployment" job publishes the raw source tree on every push
+      # and overwrites this workflow's build with a blank page. Switch the site to
+      # workflow builds so only this workflow deploys.
+      - name: Ensure Pages builds from this workflow
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          api() { curl -sS -H "Authorization: Bearer $GH_TOKEN" -H "Accept: application/vnd.github+json" \
+                       -H "X-GitHub-Api-Version: 2022-11-28" "$@"; }
+          current=$(api "https://api.github.com/repos/$REPO/pages" | jq -r '.build_type // "none"')
+          echo "Current Pages build_type: $current"
+          if [ "$current" = "workflow" ]; then
+            echo "Already building from GitHub Actions."
+          elif [ "$current" = "none" ]; then
+            echo "No Pages site yet; creating one that builds from GitHub Actions."
+            api -X POST "https://api.github.com/repos/$REPO/pages" -d '{"build_type":"workflow"}' -o /dev/null -w "HTTP %{http_code}\n"
+          else
+            code=$(api -X PUT "https://api.github.com/repos/$REPO/pages" -d '{"build_type":"workflow"}' -o /tmp/pages.json -w "%{http_code}")
+            echo "Switch to workflow builds -> HTTP $code"
+            if [ "$code" != "204" ] && [ "$code" != "200" ]; then
+              cat /tmp/pages.json
+              echo "::error::Could not switch Pages to GitHub Actions builds. Fix it by hand: Settings -> Pages -> Build and deployment -> Source: GitHub Actions."
+              exit 1
+            fi
+          fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22
@@ -46,6 +74,9 @@ jobs:
       - run: npm run build
 
       - uses: actions/configure-pages@v5
+
+      # Stop Jekyll from touching the output if Pages is ever switched back to branch mode
+      - run: touch dist/.nojekyll
 
       - uses: actions/upload-pages-artifact@v3
         with:
