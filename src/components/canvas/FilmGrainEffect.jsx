@@ -4,6 +4,7 @@ import { useTexture } from '@react-three/drei';
 import { Effect, BlendFunction } from 'postprocessing';
 import * as THREE from 'three';
 import { shaders } from '../../shaders';
+import { asset } from '../../utils/assets';
 
 const GRAIN_TILE = 512;
 
@@ -22,7 +23,7 @@ class FilmGrainEffectImpl extends Effect {
 }
 
 const FilmGrain = forwardRef(function FilmGrain({ amount = 0.07 }, ref) {
-  const texture = useTexture('/textures/grain.jpg');
+  const texture = useTexture(asset('textures/grain.jpg'));
   texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
   texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;

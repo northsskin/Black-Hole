@@ -1,5 +1,6 @@
 import { useTexture } from '@react-three/drei';
 import * as THREE from 'three';
+import { asset } from '../../utils/assets';
 
 /**
  * Equirectangular starfield on the inside of a large sphere. Kept dim on purpose:
@@ -7,7 +8,7 @@ import * as THREE from 'three';
  * faint structure behind it to bend.
  */
 export default function Starfield() {
-  const texture = useTexture('/textures/starfield.jpg');
+  const texture = useTexture(asset('textures/starfield.jpg'));
   texture.colorSpace = THREE.SRGBColorSpace;
   texture.anisotropy = 8;
   texture.wrapS = THREE.RepeatWrapping;

@@ -1,0 +1,62 @@
+# Builds the site and publishes dist/ to GitHub Pages.
+#
+# One-time setup in the repository: Settings -> Pages -> Build and deployment ->
+# Source: "GitHub Actions". (Not "Deploy from a branch": that serves the raw
+# source tree, which is a blank page because index.html points at /src/main.jsx.)
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main, master, claude/new-session-4y4vfx]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Project pages live at https://<user>.github.io/<repo>/, so every asset URL
+      # must be prefixed with /<repo>/. A user/organisation site (<user>.github.io)
+      # lives at the root instead.
+      - name: Resolve base path
+        run: |
+          if [[ "${{ github.event.repository.name }}" == *.github.io ]]; then
+            echo "VITE_BASE=/" >> "$GITHUB_ENV"
+          else
+            echo "VITE_BASE=/${{ github.event.repository.name }}/" >> "$GITHUB_ENV"
+          fi
+
+      - run: npm run build
+
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

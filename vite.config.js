@@ -1,8 +1,10 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// Zero-config deploy target: `npm run build` -> dist/ (Vercel / Netlify pick it up automatically).
+// `npm run build` -> dist/. Vercel / Netlify serve it from the domain root.
+// GitHub project pages serve from /<repo>/, so the deploy workflow sets VITE_BASE.
 export default defineConfig({
+  base: process.env.VITE_BASE || '/',
   plugins: [react()],
   build: {
     target: 'es2020',

@@ -5,11 +5,12 @@ import * as THREE from 'three';
 import { shaders } from '../../shaders';
 import { useSceneStore } from '../../store/useSceneStore';
 import { sim } from '../../utils/sim';
+import { asset } from '../../utils/assets';
 
 const STAR_SHARE = 0.5;
 
 export default function ParticleField({ count = 8000 }) {
-  const sprite = useTexture('/textures/particle.png');
+  const sprite = useTexture(asset('textures/particle.png'));
   const { gl, camera } = useThree();
   const pointsRef = useRef();
 

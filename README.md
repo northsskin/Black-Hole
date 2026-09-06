@@ -17,6 +17,20 @@ npm run preview    # serve the production build
 
 Deploys to Vercel or Netlify with zero configuration: both detect Vite and run `npm run build`.
 
+### GitHub Pages
+
+The workflow in `.github/workflows/deploy-pages.yml` builds the site and publishes `dist/` on
+every push. One-time setup: **Settings → Pages → Build and deployment → Source: GitHub Actions**.
+
+Do not use "Deploy from a branch": that serves the raw source tree, and `index.html` points at
+`/src/main.jsx`, so the page stays blank. Project pages live under `/<repo>/`, which is why the
+workflow sets `VITE_BASE=/<repo>/` before building; all asset URLs go through
+`import.meta.env.BASE_URL` (see `src/utils/assets.js`). To build for a sub-path locally:
+
+```bash
+VITE_BASE=/Black-Hole/ npm run build && npm run preview   # http://localhost:4173/Black-Hole/
+```
+
 ## What's in the scene
 
 | Piece | Where | Notes |
